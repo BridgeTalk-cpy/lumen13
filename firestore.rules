@@ -1,0 +1,16 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 교육용 게임 데이터: sessions/{교육코드}/teams/{팀번호}
+    match /sessions/{code} {
+      allow read, write: if true;
+      match /teams/{team} {
+        allow read, write: if true;
+      }
+    }
+    // 그 외 경로는 모두 차단
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

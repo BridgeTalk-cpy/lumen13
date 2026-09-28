@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0b1530">
+  <title>사라진 13분 · 강사 화면</title>
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/admin.css">
+  <script src="js/qrcode.js"></script>
+</head>
+<body class="admin">
+  <div id="gate" class="gate">
+    <div class="card" style="max-width:360px;width:100%">
+      <p class="kicker">강사 화면</p>
+      <h2>사라진 13분</h2>
+      <label class="label" for="pin">비밀번호</label>
+      <input type="text" id="pin" inputmode="numeric" autocomplete="off">
+      <div style="height:12px"></div>
+      <button class="btn primary block" id="pinGo">들어가기</button>
+      <p class="muted" id="pinMsg" style="font-size:13px;margin:10px 0 0"></p>
+    </div>
+  </div>
+
+  <div id="shell" class="hidden">
+    <div id="demo" class="demo-banner hidden">데모 모드 · 이 브라우저 안에서만 저장됩니다 (팀 화면도 같은 브라우저의 다른 탭에서 열어야 동기화됩니다)</div>
+    <header class="a-top">
+      <div class="a-brand"><span class="kicker" style="margin:0">MODULE 1 · 문제해결 게임</span><b>사라진 13분 · 강사 화면</b></div>
+      <nav class="tabs" id="tabs">
+        <button data-tab="status" class="on">현황</button>
+        <button data-tab="grade">채점</button>
+        <button data-tab="show">발표</button>
+        <button data-tab="setup">설정</button>
+      </nav>
+      <div class="a-code">코드 <b id="codeLabel"></b></div>
+    </header>
+    <main id="view" class="a-main"></main>
+  </div>
+  <script type="module" src="js/admin.js"></script>
+</body>
+</html>
