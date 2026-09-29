@@ -23,7 +23,7 @@ const DISTRACTOR_CAUSE = ['음식', '알레르기', '알러지', '고열', '더�
 const PERSON = ['담당자', '범인', '팀장', '박준호', '기술자', '직원이', '직원의', '작업자가', '작업자의', '스태프가', '누가작동', '누가분사', '누가했'];
 
 // WHY1
-const EXPOSE = ['노출', '흡입', '들이마', '들이켜', '마셔', '마셨', '마시', '접촉', '맡', '호흡', '퍼', '분사', '뿌', '살포', '공기', '작용', '영향', '중독', '닿', '묻', '반응'];
+const EXPOSE = ['누출', '유출', '새어', '새나', '방출', '확산', '흩어', '인원에게', '사람들에게', '노출', '흡입', '들이마', '들이켜', '마셔', '마셨', '마시', '접촉', '맡', '호흡', '퍼', '분사', '뿌', '살포', '공기', '작용', '영향', '중독', '닿', '묻', '반응'];
 
 // WHY2
 const UNAPPROVED = ['승인되지않', '승인안', '미승인', '승인목록에없', '승인없이', '승인받지않', '승인을받지않', '승인을안', '허가없이', '허가받지않', '허가되지않', '무단', '추가용기', '추가된용기', '추가로연결', '몰래', '불법', '승인외', '목록에없', '목록외'];
@@ -39,7 +39,7 @@ const G_CHECK = ['확인', '재확인', '점검', '검증', '체크', '검수', 
 const G_AUTH = ['권한', '단독', '혼자', '통제', '제어', '수동모드', '접근'];
 const G_RESP = ['책임', '담당', '역할', '분장', '주체', '소관', '관리자'];
 const G_PROC = ['절차', '규정', '프로세스', '체계', '기준', '매뉴얼', '규칙', '단계', '안내', '구조', '시스템'];
-const LACK = ['없', '부재', '누락', '미흡', '불명확', '명확하지', '명확치', '모호', '빠져', '빠진', '부족', '않', '못', '불분명', '허술', '공백', '미비', '애매', '안했', '안됐', '안되', '안받', '안정해', '몰랐', '생략', '무시'];
+const LACK = ['미달', '미실시', '미이행', '미확인', '미점검', '안함', '안했', '않음', '소홀', '없', '부재', '누락', '미흡', '불명확', '명확하지', '명확치', '모호', '빠져', '빠진', '부족', '않', '못', '불분명', '허술', '공백', '미비', '애매', '안했', '안됐', '안되', '안받', '안정해', '몰랐', '생략', '무시'];
 
 const r = (ok, extra = {}) => ({ ok, soft: false, reason: '', ...extra });
 
@@ -79,23 +79,13 @@ export function whyScore(w, manual, cfg) {
 }
 
 // ── ACT 3 점수 ─────────────────────────────
+// 순서 맞추기: 정답 자리에 놓인 카드 1장당 perSlot점, 8장 모두 맞으면 perfectBonus 추가
 export function scoreAct3(order, act3) {
-  if (!Array.isArray(order) || order.filter(Boolean).length < 8) return { total: 0, parts: {} };
-  const front = order.slice(0, 4);
-  const back = order.slice(4, 8);
-  const parts = {};
-  let total = 0;
-  for (const g of act3.groups) {
-    const pool = g.where === 'front' ? front : back;
-    const s = g.cards.filter((c) => pool.includes(c)).length * g.per;
-    parts[g.key] = s;
-    total += s;
-  }
-  const fo = front.join() === act3.answerFront.join() ? act3.orderBonus : 0;
-  const bo = back.join() === act3.answerBack.join() ? act3.orderBonus : 0;
-  parts.order = fo + bo;
-  total += fo + bo;
-  return { total, parts };
+  if (!Array.isArray(order) || order.filter(Boolean).length < 8) return { total: 0, parts: { correct: 0, bonus: 0 } };
+  const ans = [...act3.answerFront, ...act3.answerBack];
+  const correct = ans.filter((c, i) => order[i] === c).length;
+  const bonus = correct === 8 ? act3.perfectBonus : 0;
+  return { total: correct * act3.perSlot + bonus, parts: { correct, bonus } };
 }
 
 // ── ACT 4 점수 ─────────────────────────────

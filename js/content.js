@@ -97,12 +97,8 @@ export const ACT3 = {
   intro: 'DO카드 8장을 살펴보고 실행 순서를 정하십시오. 앞 4칸은 18:00 개장 전에 먼저 할 일, 뒤 4칸은 개장 후에 할 일입니다.',
   answerFront: ['01', '02', '06', '03'],
   answerBack: ['04', '05', '07', '08'],
-  groups: [
-    { key: 'safety', label: '안전 확보', cards: ['01', '02'], where: 'front', per: 5 },
-    { key: 'normal', label: '운영 정상화', cards: ['06', '03'], where: 'front', per: 5 },
-    { key: 'prevent', label: '재발 방지', cards: ['04', '05', '07', '08'], where: 'back', per: 5 },
-  ],
-  orderBonus: 5, // 앞/뒤 그룹 각각 순서까지 정확하면
+  perSlot: 5,      // 정확한 자리에 놓인 카드 1장당
+  perfectBonus: 10, // 8장 모두 정답 순서일 때
 };
 
 export const ACT4 = {

@@ -165,7 +165,7 @@ function renderGrade() {
     ${t.act3?.submittedAt ? '' : '<p class="muted">아직 제출 전입니다.</p>'}
     <div class="ans"><span class="k">먼저 (18:00 전)</span>${ord.slice(0, 4).map((x) => x || '—').join(' → ')}</div>
     <div class="ans"><span class="k">이후</span>${ord.slice(4, 8).map((x) => x || '—').join(' → ')}</div>
-    ${t.act3?.parts ? `<div class="meta">안전 확보 ${t.act3.parts.safety} · 운영 정상화 ${t.act3.parts.normal} · 재발 방지 ${t.act3.parts.prevent} · 순서 보너스 ${t.act3.parts.order}</div>` : ''}${penRow('act3')}</div>`;
+    ${t.act3?.parts ? `<div class="meta">${t.act3.parts.correct != null ? `정확한 자리 ${t.act3.parts.correct} / 8칸 (${t.act3.parts.correct * ACT3.perSlot}점) · 완벽 보너스 ${t.act3.parts.bonus}점` : `안전 확보 ${t.act3.parts.safety} · 운영 정상화 ${t.act3.parts.normal} · 재발 방지 ${t.act3.parts.prevent} · 순서 보너스 ${t.act3.parts.order}`}</div>` : ''}${penRow('act3')}</div>`;
   const auto = t.act4?.auto || scoreAct4(t.act4 || {});
   const act4 = `<div class="gsec"><h3>ACT 4 · 진실을 밝혀라 (보너스) <span class="pts">${s.a4} / 10</span></h3>
     ${ACT4.questions.map((q) => `<div class="ans"><span class="k">${esc(q.q)} · 자동 ${auto[q.key]} / ${q.max}</span>${esc(t.act4?.[q.key]) || '—'}<div class="model" style="margin-top:6px">정답: ${esc(ACT4.model[q.key])}</div></div>`).join('')}
@@ -211,14 +211,14 @@ function renderShow() {
     const row = (name, ord, isAns) => `<div class="row8"><div class="nm">${esc(name)}</div>${Array.from({ length: 8 }, (_, i) => {
       const v = ord[i] || '';
       let cls = i < 4 ? 'front' : '';
-      if (reveal && !isAns && v) cls += (i < 4 ? ACT3.answerFront : ACT3.answerBack).includes(v) ? ' good' : ' bad';
+      if (reveal && !isAns && v) cls += ans[i] === v ? ' good' : ' bad';
       return `<div class="cell ${cls}" title="${esc(titles[v] || '')}">${v || '—'}</div>`;
     }).join('')}</div>`;
     body = `<h2>ACT 3 · 실행 순서</h2>
       <div class="row8"><div></div>${Array.from({ length: 8 }, (_, i) => `<div class="cell head">${i < 4 ? '18:00 전' : '개장 후'} ${i + 1}</div>`).join('')}</div>
       ${list.map((t) => row(tname(t), t.act3?.order || [], false)).join('')}
       ${reveal ? row('정답', ans, true) + `<div class="modelbox"><b>먼저</b> ${ACT3.answerFront.map((n) => `${n} ${titles[n]}`).join(' → ')}<br><b>이후</b> ${ACT3.answerBack.map((n) => `${n} ${titles[n]}`).join(' → ')}</div>` : ''}
-      ${reveal ? `<div class="sgrid">${list.map((t) => { const p = t.act3?.parts || {}; return `<div class="scol"><h3>${esc(tname(t))} · ${t.act3?.score || 0}점</h3><div class="meta" style="font-size:16px">안전 확보 ${p.safety || 0}/10 · 운영 정상화 ${p.normal || 0}/10<br>재발 방지 ${p.prevent || 0}/20 · 순서 보너스 ${p.order || 0}/10</div></div>`; }).join('')}</div>` : ''}`;
+      ${reveal ? `<div class="sgrid">${list.map((t) => { const p = t.act3?.parts || {}; return `<div class="scol"><h3>${esc(tname(t))} · ${t.act3?.score || 0}점</h3><div class="meta" style="font-size:16px">정확한 자리 ${p.correct || 0} / 8칸<br>완벽 보너스 ${p.bonus || 0} / ${ACT3.perfectBonus}</div></div>`; }).join('')}</div>` : ''}`;
   } else if (showAct === 'act4') {
     body = `<h2>ACT 4 · 진실을 밝혀라</h2>` + ACT4.questions.map((q, i) => `
       <div style="margin-bottom:22px"><div class="whyq" style="font-size:24px">${i + 1}. ${esc(q.q)}</div>
