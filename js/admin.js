@@ -1,6 +1,6 @@
 import { getStore } from './store.js';
-import { ACT1, ACT2, ACT3, ACT4, DO_CARDS, ADMIN_PIN, MAX_TEAMS, DEFAULT_TIMERS } from './content.js';
-import { whyScore, scoreAct4 } from './grader.js';
+import { ACT1, ACT2, ACT3, ACT4, DO_CARDS, ADMIN_PIN, MAX_TEAMS, DEFAULT_TIMERS, TIME_PENALTY } from './content.js';
+import { whyScore, whyMax, scoreAct4 } from './grader.js';
 
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -18,18 +18,23 @@ const PICK_LABEL = { pickup2: 'ACT 2 카드(질문·단서·추가 조사카드)
 // ── 점수 ────────────────────────────────
 function scoreOf(t) {
   const ad = t.admin || {};
+  const pen = {};
+  for (const k of ['act1', 'act2', 'act3', 'act4']) pen[k] = t.timeOver?.[k] && !ad.timeCancel?.[k] ? TIME_PENALTY : 0;
   const checks = ad.act1Checks || [];
-  const a1 = checks.filter(Boolean).length * ACT1.pointsPerGap;
+  const a1 = checks.filter(Boolean).length * ACT1.pointsPerGap - pen.act1;
   const a1Pending = !!t.act1?.submittedAt && !ad.act1Done;
   let a2 = 0, a2Pending = false;
   for (const w of ACT2.whys) {
     const r = whyScore(t.act2?.[w.key], ad.manual?.[w.key], ACT2);
     a2 += r.score; if (r.pending) a2Pending = true;
   }
-  const a3 = t.act3?.score || 0;
+  if (typeof ad.coreScore === 'number') a2 += ad.coreScore;
+  else if (t.act2?.submittedAt) a2Pending = true;
+  a2 -= pen.act2;
+  const a3 = (t.act3?.score || 0) - pen.act3;
   const auto4 = t.act4?.auto?.total ?? 0;
-  const a4 = typeof ad.act4Override === 'number' ? ad.act4Override : auto4;
-  return { a1, a2, a3, a4, total: a1 + a2 + a3 + a4, a1Pending, a2Pending };
+  const a4 = (typeof ad.act4Override === 'number' ? ad.act4Override : auto4) - pen.act4;
+  return { a1, a2, a3, a4, total: a1 + a2 + a3 + a4, a1Pending, a2Pending, pen };
 }
 const teamList = () => Object.values(teams).filter((t) => +t.id <= (session?.teamCount || MAX_TEAMS)).sort((a, b) => +a.id - +b.id);
 const tname = (t) => t.name || `${t.id}팀`;
@@ -86,7 +91,7 @@ function renderStatus() {
     if (t.act2?.hintCard === 'need') alerts.push(`<div class="alert"><span><span class="who">${esc(tname(t))}</span>WHY 3 힌트카드 ① 전달 필요</span><button class="btn small" data-hint="${t.id}">전달함</button></div>`);
     const s = scoreOf(t);
     if (s.a1Pending) alerts.push(`<div class="alert blue"><span><span class="who">${esc(tname(t))}</span>ACT 1 채점 대기</span><button class="btn small" data-goto="${t.id}">채점하기</button></div>`);
-    if (s.a2Pending) alerts.push(`<div class="alert blue"><span><span class="who">${esc(tname(t))}</span>ACT 2 강사 채점 대기 (3회 오답)</span><button class="btn small" data-goto="${t.id}">채점하기</button></div>`);
+    if (s.a2Pending) alerts.push(`<div class="alert blue"><span><span class="who">${esc(tname(t))}</span>ACT 2 강사 채점 대기 (2차 오답 · 핵심 원인)</span><button class="btn small" data-goto="${t.id}">채점하기</button></div>`);
   }
   const cards = list.map((t) => {
     const s = scoreOf(t);
@@ -127,37 +132,44 @@ function renderGrade() {
   const ad = t.admin || {};
   const s = scoreOf(t);
   const checks = ad.act1Checks || [];
+  const penRow = (k) => t.timeOver?.[k] ? `<div class="penrow ${ad.timeCancel?.[k] ? 'off' : ''}"><span>⏱ 시간 초과 제출 ${ad.timeCancel?.[k] ? '(감점 취소됨)' : `−${TIME_PENALTY}점`}</span><button class="btn small" data-tcancel="${k}">${ad.timeCancel?.[k] ? '감점 다시 적용' : '감점 취소'}</button></div>` : '';
+  const modelBox = (title, body) => `<div class="modelbox small"><b>${title}</b><br>${body}</div>`;
   const act1 = `<div class="gsec"><h3>ACT 1 · 찾아라 <span class="pts">${s.a1} / 20${s.a1Pending ? ' · 채점 대기' : ''}</span></h3>
     ${t.act1?.submittedAt ? '' : '<p class="muted">아직 제출 전입니다. 작성 중인 내용이 보입니다.</p>'}
     <div class="ans"><span class="k">AS-IS</span>${esc(t.act1?.asis) || '—'}</div>
     <div class="ans"><span class="k">GAP</span>${esc(t.act1?.gap) || '—'}</div>
     <div class="checks">${ACT1.gapItems.map((g, i) => `<label><input type="checkbox" data-chk="${i}" ${checks[i] ? 'checked' : ''}> ${'①②③④'[i]} ${esc(g)}</label>`).join('')}</div>
     <div style="height:10px"></div>
-    <button class="btn small ${ad.act1Done ? '' : 'primary'}" id="a1done">${ad.act1Done ? '채점 완료됨 ✓' : '채점 완료로 표시'}</button></div>`;
+    <button class="btn small ${ad.act1Done ? '' : 'primary'}" id="a1done">${ad.act1Done ? '채점 완료됨 ✓' : '채점 완료로 표시'}</button>${penRow('act1')}</div>`;
   const whys = ACT2.whys.map((w) => {
     const d = t.act2?.[w.key] || {};
     const r = whyScore(d, ad.manual?.[w.key], ACT2);
-    const st = d.status === 'passed' ? `통과 · 오답 ${d.wrong || 0}회` : d.status === 'manual' ? '강사 채점' : d.attempts?.length ? `진행 중 · 오답 ${d.wrong || 0}회` : '미시작';
-    const atts = (d.attempts || []).map((a) => `<li><span class="${a.ok ? 'o' : a.soft ? 's' : 'x'}">${a.ok ? '통과' : a.soft ? '보완' : '오답'}</span> ${esc(a.a)}${a.n ? ` <span>→ ${esc(a.n)}</span>` : ''}</li>`).join('');
+    const mx = whyMax(d, ACT2);
+    const st = d.status === 'passed' ? (d.wrong ? '2차 정답' : '1차 정답') : d.status === 'manual' ? '2차 오답 · 강사 채점' : d.attempts?.length ? '2차 작성 중' : '미시작';
+    const atts = (d.attempts || []).filter((a) => !a.soft).map((a, i) => `<li><span class="${a.ok ? 'o' : 'x'}">${i + 1}차 ${a.ok ? '정답' : '오답'}</span> ${esc(a.a)}${a.n ? ` <span>→ ${esc(a.n)}</span>` : ''}</li>`).join('');
     return `<div class="why">
-      <div class="row"><b>${w.label} · ${esc(w.question)}</b><span class="chip ${d.status === 'passed' ? 'ok' : d.status === 'manual' ? 'manual' : ''}">${st} · ${r.score}점${r.pending ? '(대기)' : ''}</span></div>
+      <div class="row"><b>${w.label} · ${esc(w.question)}</b><span class="chip ${d.status === 'passed' ? 'ok' : d.status === 'manual' ? 'manual' : ''}">${st}${d.hintCard ? ' · 힌트카드 −' + ACT2.hintCardPenalty : ''} · ${r.score}점${r.pending ? '(대기)' : ''}</span></div>
       ${atts ? `<ol class="attempts">${atts}</ol>` : ''}
-      ${d.status === 'manual' ? `<div class="inline" style="margin-top:6px"><span>강사 점수</span><input type="number" min="0" max="10" data-manual="${w.key}" value="${typeof ad.manual?.[w.key] === 'number' ? ad.manual[w.key] : ''}" placeholder="0~10"><span class="muted">/ 10</span></div>` : ''}
-      <div class="model">모범답: ${esc(w.model)}${w.modelNext ? ` / 다음 질문: ${esc(w.modelNext)}` : ''}</div>
+      ${d.status === 'manual' ? `<div class="inline" style="margin-top:6px"><span>강사 점수</span><input type="number" min="0" max="${mx}" data-manual="${w.key}" data-max="${mx}" value="${typeof ad.manual?.[w.key] === 'number' ? ad.manual[w.key] : ''}" placeholder="0~${mx}"><span class="muted">/ ${mx}</span></div>
+        ${modelBox('정답', `${esc(w.model)}<br><span class="muted">인정 키워드: ${esc(w.keywords)}</span>`)}` : `<div class="model">모범답: ${esc(w.model)}</div>`}
     </div>`;
   }).join('');
-  const act2 = `<div class="gsec"><h3>ACT 2 · 밝혀라 <span class="pts">${s.a2} / 30${s.a2Pending ? ' · 채점 대기' : ''}</span></h3>${whys}
-    ${t.act2?.core ? `<div class="ans" style="margin-top:12px"><span class="k">핵심 원인</span>${esc(t.act2.core)}</div>` : ''}</div>`;
+  const coreV = typeof ad.coreScore === 'number' ? ad.coreScore : '';
+  const act2 = `<div class="gsec"><h3>ACT 2 · 밝혀라 <span class="pts">${s.a2} / ${ACT2.whys.length * ACT2.pointsPerWhy + ACT2.coreMax}${s.a2Pending ? ' · 채점 대기' : ''}</span></h3>${whys}
+    <div class="why"><div class="row"><b>핵심 원인 · 강사 채점</b><span class="chip ${coreV === '' ? '' : 'ok'}">${coreV === '' ? (t.act2?.submittedAt ? '채점 대기' : '미제출') : coreV + '점'}</span></div>
+      <div class="ans" style="margin-top:8px">${esc(t.act2?.core) || '—'}</div>
+      <div class="inline"><span>강사 점수</span><input type="number" min="0" max="${ACT2.coreMax}" id="coreScore" value="${coreV}" placeholder="0~${ACT2.coreMax}"><span class="muted">/ ${ACT2.coreMax}</span></div>
+      ${modelBox('정답', esc(ACT2.coreModel))}</div>${penRow('act2')}</div>`;
   const ord = t.act3?.order || t.act3?.draft || [];
   const act3 = `<div class="gsec"><h3>ACT 3 · 해결하라 <span class="pts">${s.a3} / 50</span></h3>
     ${t.act3?.submittedAt ? '' : '<p class="muted">아직 제출 전입니다.</p>'}
     <div class="ans"><span class="k">먼저 (18:00 전)</span>${ord.slice(0, 4).map((x) => x || '—').join(' → ')}</div>
     <div class="ans"><span class="k">이후</span>${ord.slice(4, 8).map((x) => x || '—').join(' → ')}</div>
-    ${t.act3?.parts ? `<div class="meta">안전 확보 ${t.act3.parts.safety} · 운영 정상화 ${t.act3.parts.normal} · 재발 방지 ${t.act3.parts.prevent} · 순서 보너스 ${t.act3.parts.order}</div>` : ''}</div>`;
+    ${t.act3?.parts ? `<div class="meta">안전 확보 ${t.act3.parts.safety} · 운영 정상화 ${t.act3.parts.normal} · 재발 방지 ${t.act3.parts.prevent} · 순서 보너스 ${t.act3.parts.order}</div>` : ''}${penRow('act3')}</div>`;
   const auto = t.act4?.auto || scoreAct4(t.act4 || {});
   const act4 = `<div class="gsec"><h3>ACT 4 · 진실을 밝혀라 (보너스) <span class="pts">${s.a4} / 10</span></h3>
-    ${ACT4.questions.map((q) => `<div class="ans"><span class="k">${esc(q.q)} · 자동 ${auto[q.key]} / ${q.max}</span>${esc(t.act4?.[q.key]) || '—'}</div>`).join('')}
-    <div class="inline"><span>점수 직접 입력(선택)</span><input type="number" min="0" max="10" id="a4ov" value="${typeof ad.act4Override === 'number' ? ad.act4Override : ''}" placeholder="자동 ${auto.total}"><button class="btn small" id="a4clear">자동 점수로</button></div></div>`;
+    ${ACT4.questions.map((q) => `<div class="ans"><span class="k">${esc(q.q)} · 자동 ${auto[q.key]} / ${q.max}</span>${esc(t.act4?.[q.key]) || '—'}<div class="model" style="margin-top:6px">정답: ${esc(ACT4.model[q.key])}</div></div>`).join('')}
+    <div class="inline"><span>점수 직접 입력(선택)</span><input type="number" min="0" max="10" id="a4ov" value="${typeof ad.act4Override === 'number' ? ad.act4Override : ''}" placeholder="자동 ${auto.total}"><button class="btn small" id="a4clear">자동 점수로</button></div>${penRow('act4')}</div>`;
   $('#view').innerHTML = `
     <div class="pills">${list.map((x) => `<button data-team="${x.id}" class="${x.id === gradeTeam ? 'on' : ''}">${esc(tname(x))} · ${scoreOf(x).total}점</button>`).join('')}</div>
     <div class="row" style="margin-bottom:12px"><h2 style="margin:0">${esc(tname(t))}</h2><div class="total">${s.total}<small> 점</small></div></div>
@@ -169,9 +181,11 @@ function renderGrade() {
   }));
   $('#a1done').addEventListener('click', () => upd(t.id, { 'admin.act1Done': !ad.act1Done, 'admin.act1Checks': ACT1.gapItems.map((_, i) => $(`[data-chk="${i}"]`).checked) }));
   $$('[data-manual]').forEach((inp) => inp.addEventListener('change', () => {
-    const v = inp.value === '' ? null : Math.max(0, Math.min(10, +inp.value));
+    const v = inp.value === '' ? null : Math.max(0, Math.min(+inp.dataset.max, +inp.value));
     upd(t.id, { [`admin.manual.${inp.dataset.manual}`]: v });
   }));
+  $('#coreScore').addEventListener('change', (e) => upd(t.id, { 'admin.coreScore': e.target.value === '' ? null : Math.max(0, Math.min(ACT2.coreMax, +e.target.value)) }));
+  $$('[data-tcancel]').forEach((b) => b.addEventListener('click', () => upd(t.id, { [`admin.timeCancel.${b.dataset.tcancel}`]: !ad.timeCancel?.[b.dataset.tcancel] })));
   $('#a4ov').addEventListener('change', (e) => upd(t.id, { 'admin.act4Override': e.target.value === '' ? null : Math.max(0, Math.min(10, +e.target.value)) }));
   $('#a4clear').addEventListener('click', () => upd(t.id, { 'admin.act4Override': null }));
 }
@@ -212,15 +226,15 @@ function renderShow() {
       ${reveal ? `<div class="modelbox"><b>해석</b> ${esc(ACT4.model[q.key])}</div>` : ''}</div>`).join('');
   } else {
     const rows = list.map((t) => ({ t, s: scoreOf(t) })).sort((a, b) => b.s.total - a.s.total);
-    const max = 110;
+    const max = 120;
     const best3 = [...rows].sort((a, b) => b.s.a3 - a.s.a3)[0];
     const colors = ['#e9b949', '#8fb0ff', '#45c48a', '#c99bff'];
     body = `<h2>점수판</h2>
-      <div class="legend"><span><i style="background:${colors[0]}"></i>ACT 1 (20)</span><span><i style="background:${colors[1]}"></i>ACT 2 (30)</span><span><i style="background:${colors[2]}"></i>ACT 3 (50)</span><span><i style="background:${colors[3]}"></i>ACT 4 보너스 (10)</span></div>
+      <div class="legend"><span><i style="background:${colors[0]}"></i>ACT 1 (20)</span><span><i style="background:${colors[1]}"></i>ACT 2 (40)</span><span><i style="background:${colors[2]}"></i>ACT 3 (50)</span><span><i style="background:${colors[3]}"></i>ACT 4 보너스 (10)</span></div>
       <div class="board">${rows.map(({ t, s }, i) => `<div class="brow ${i === 0 && s.total > 0 ? 'first' : ''}">
         <div class="rk">${i + 1}</div><div class="nm">${esc(tname(t))}</div>
-        <div class="barwrap"><div class="bar">${[s.a1, s.a2, s.a3, s.a4].map((v, k) => `<i style="width:${(v / max) * 100}%;background:${colors[k]}"></i>`).join('')}</div>
-          <div class="br">ACT1 ${s.a1}${s.a1Pending ? '(대기)' : ''} · ACT2 ${s.a2}${s.a2Pending ? '(대기)' : ''} · ACT3 ${s.a3} · ACT4 ${s.a4}</div></div>
+        <div class="barwrap"><div class="bar">${[s.a1, s.a2, s.a3, s.a4].map((v, k) => `<i style="width:${(Math.max(0, v) / max) * 100}%;background:${colors[k]}"></i>`).join('')}</div>
+          <div class="br">ACT1 ${s.a1}${s.a1Pending ? '(대기)' : ''} · ACT2 ${s.a2}${s.a2Pending ? '(대기)' : ''} · ACT3 ${s.a3} · ACT4 ${s.a4}${Object.values(s.pen).some(Boolean) ? ` · <span style="color:var(--bad)">시간 초과 −${Object.values(s.pen).reduce((a, b) => a + b, 0)}</span>` : ''}</div></div>
         <div class="sc">${s.total}</div></div>`).join('')}</div>
       ${reveal && best3 ? `<div class="best"><div class="t">BEST SOLUTION TEAM · ACT 3 최고점</div><div class="n">${esc(tname(best3.t))}</div></div>` : ''}`;
   }

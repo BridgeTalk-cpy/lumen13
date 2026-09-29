@@ -1,5 +1,5 @@
 import { getStore } from './store.js';
-import { ACT1, ACT2, ACT3, ACT4, DO_CARDS, PICKUPS, MAX_TEAMS, DEFAULT_TIMERS } from './content.js';
+import { ACT1, ACT2, ACT3, ACT4, DO_CARDS, PICKUPS, MAX_TEAMS, DEFAULT_TIMERS, TIME_PENALTY } from './content.js';
 import { gradeWhy, scoreAct3, scoreAct4 } from './grader.js';
 
 const $ = (s) => document.querySelector(s);
@@ -109,7 +109,7 @@ function showJoin(defCode) {
 // ── 팀 상태 반영 ─────────────────────────
 function keyFor(t) {
   let k = t.stage;
-  if (t.stage === 'act2') k += JSON.stringify(ACT2.whys.map((w) => [t.act2?.[w.key]?.status, t.act2?.[w.key]?.wrong, (t.act2?.[w.key]?.attempts || []).length]));
+  if (t.stage === 'act2') k += JSON.stringify(ACT2.whys.map((w) => [t.act2?.[w.key]?.status, t.act2?.[w.key]?.wrong, t.act2?.[w.key]?.hintChoice, (t.act2?.[w.key]?.attempts || []).length]));
   return k;
 }
 function onTeam() {
@@ -141,8 +141,8 @@ function tick() {
   if (!start || !mins) { el.classList.add('hidden'); return; }
   const left = Math.round((start + mins * 60000 - now()) / 1000);
   el.classList.remove('hidden', 'low', 'over');
-  if (left <= 0) { el.textContent = '시간 종료'; el.classList.add('over'); return; }
-  if (left <= 60) el.classList.add('low');
+  if (left <= 0) { el.textContent = `시간 종료 · −${TIME_PENALTY}점`; el.classList.add('over'); return; }
+  if (left <= 60) { el.classList.add('low'); el.textContent = `${left}초 · 초과 시 −${TIME_PENALTY}`; return; }
   el.textContent = `${String(Math.floor(left / 60)).padStart(2, '0')}:${String(left % 60).padStart(2, '0')}`;
 }
 
@@ -153,6 +153,10 @@ async function goStage(stage, extra = {}) {
   await store.updateTeam(code, teamId, patch);
   window.scrollTo(0, 0);
 }
+
+function limitOf(stage) { return (session?.timers?.[stage] ?? DEFAULT_TIMERS[stage]) * 60000; }
+function isOver(stage) { const st = team?.stageStartedAt?.[stage]; return !!st && now() > st + limitOf(stage); }
+function overPatch(stage) { return isOver(stage) ? { [`timeOver.${stage}`]: true } : {}; }
 
 const teamSwitch = `<div class="center" style="margin-top:28px"><button class="link" id="switchTeam">팀 다시 선택하기</button></div>`;
 function bindSwitch() {
@@ -169,7 +173,7 @@ function renderAct1() {
   $('#main').innerHTML = `
     <p class="kicker">MODULE 1 · 문제해결 게임</p>
     <h1>${esc(ACT1.title)}</h1>
-    <p class="lead">${esc(ACT1.intro)}</p>
+    <p class="lead">${esc(ACT1.intro)}<br><span style="color:var(--gold)">제한시간 ${(session?.timers?.act1 ?? DEFAULT_TIMERS.act1)}분 · 시간을 넘겨 제출하면 −${TIME_PENALTY}점</span></p>
     <div class="card">
       <span class="label">TO-BE · 기대 상태 <small>18:00에는 어떤 상태가 되어야 하는가?</small></span>
       <div class="fixed">${esc(ACT1.tobe)}</div>
@@ -191,7 +195,7 @@ function renderAct1() {
   upd();
   $('#sub1').addEventListener('click', async () => {
     if (!(await confirmModal('ACT 1을 제출할까요?', '제출하면 수정할 수 없어요.', '제출'))) return;
-    await goStage('pickup2', { 'act1.asis': $('#asis').value, 'act1.gap': $('#gap').value, 'act1.submittedAt': now() });
+    await goStage('pickup2', { 'act1.asis': $('#asis').value, 'act1.gap': $('#gap').value, 'act1.submittedAt': now(), ...overPatch('act1') });
   });
 }
 
@@ -205,6 +209,7 @@ function renderPickup(act, btnLabel) {
       <h1>강사님께 카드를<br>받으러 오세요</h1>
       <div class="what">${esc(PICKUPS[act])}</div>
       <p class="muted">카드를 받은 뒤 아래 버튼을 누르면<br>다음 미션과 타이머가 시작됩니다.</p>
+      <p style="color:var(--gold);font-weight:700">제한시간 ${(session?.timers?.[act] ?? DEFAULT_TIMERS[act])}분 · 시간을 넘겨 제출하면 −${TIME_PENALTY}점</p>
     </div>${teamSwitch}`;
   bindSwitch();
   $('#go').addEventListener('click', () => goStage(act));
@@ -216,11 +221,11 @@ function currentWhyIdx() {
 }
 function renderAct2() {
   const cur = currentWhyIdx();
-  const parts = [`<p class="kicker">MODULE 1 · 문제해결 게임</p><h1>${esc(ACT2.title)}</h1><p class="lead">${esc(ACT2.intro)}</p>`];
+  const parts = [`<p class="kicker">MODULE 1 · 문제해결 게임</p><h1>${esc(ACT2.title)}</h1><p class="lead">${esc(ACT2.intro)}<br><span style="color:var(--gold)">1차에 맞히면 10점, 틀리면 −2점 후 2차 작성 · 다음 질문은 채점하지 않습니다.</span></p>`];
   ACT2.whys.forEach((w, i) => {
     if (cur !== -1 && i > cur) return;
     const d = team.act2?.[w.key] || {};
-    const head = `<div class="row"><span class="kicker" style="margin:0">${w.label}</span>${d.status === 'passed' ? '<span class="badge ok">통과</span>' : d.status === 'manual' ? '<span class="badge manual">강사 채점</span>' : '<span class="badge open">진행 중</span>'}</div>
+    const head = `<div class="row"><span class="kicker" style="margin:0">${w.label}</span>${d.status === 'passed' ? '<span class="badge ok">통과</span>' : d.status === 'manual' ? '<span class="badge manual">강사 채점</span>' : `<span class="badge open">${d.wrong ? '2차 작성' : '1차 작성'}</span>`}</div>
       <div class="whyq">${esc(w.question)}</div>`;
     if (i !== cur) {
       parts.push(`<div class="card ${d.status === 'passed' ? 'done' : 'manual'}">${head}
@@ -229,27 +234,44 @@ function renderAct2() {
       return;
     }
     const wrong = d.wrong || 0;
+    const first = (d.attempts || []).find((a) => !a.soft);
     const f = fb && fb.key === w.key ? fb : null;
+    const needChoice = wrong >= 1 && w.hintCard && d.hintChoice === undefined;
+    let mid = '';
+    if (wrong >= 1) {
+      mid += `<div class="lockedtext"><span class="k">1차 답 (오답 · −${ACT2.penaltyPerWrong}점)</span>${esc(first?.a)}</div>`;
+      if (w.hint) mid += `<div class="feedback bad"><span class="t">힌트</span>${esc(w.hint)}</div>`;
+      if (w.hintCard) {
+        if (needChoice) {
+          mid += `<div class="feedback soft"><span class="t">정답이 어렵나요?</span>강사님께 힌트카드를 받을 수 있어요. 받으면 <b>−${ACT2.hintCardPenalty}점</b>이 됩니다. 힌트카드를 받겠습니까?
+            <div class="row" style="margin-top:10px;gap:8px"><button class="btn small primary" id="hintYes" style="flex:1">받겠습니다 (−${ACT2.hintCardPenalty}점)</button><button class="btn small" id="hintNo" style="flex:1">받지 않겠습니다</button></div></div>`;
+        } else if (d.hintChoice) {
+          mid += `<div class="feedback soft"><span class="t">강사님께 힌트카드를 받으러 오세요 (−${ACT2.hintCardPenalty}점)</span>힌트카드를 보고 2차 답을 작성해 주세요.</div>`;
+        } else {
+          mid += `<div class="feedback bad"><span class="t">다시 작성해 보세요</span>${esc(w.note)}</div>`;
+        }
+      }
+    }
+    const inputs = needChoice ? '' : `
+      <div class="field" style="margin-top:14px"><label class="label" for="ans">${wrong ? '2차 답 <small>마지막 기회 · 틀리면 강사님이 채점합니다</small>' : '우리 팀의 답 <small>한 문장으로 작성</small>'}</label>
+        <textarea id="ans">${esc(d.answer)}</textarea></div>
+      ${w.hasNext ? `<div class="field"><label class="label" for="nxt">다음에 이어서 할 수 있는 질문은? <small>채점하지 않지만 꼭 작성해 주세요</small></label>
+        <textarea id="nxt" style="min-height:72px">${esc(d.next)}</textarea></div>` : ''}
+      <div class="row"><span class="tries">${wrong ? '2차 작성 (마지막)' : '1차 작성'}</span><span class="saved" id="s_ans"></span></div>
+      ${f && f.type === 'soft' ? `<div class="feedback soft"><span class="t">${esc(f.title)}</span>${esc(f.text)}</div>` : ''}
+      <div style="height:12px"></div>
+      <button class="btn primary block" id="check">${wrong ? '2차 제출' : '정답 확인'}</button>`;
     parts.push(`<div class="card gold" id="curwhy">${head}
       <div class="whybody">${w.body.map((p) => `<p>${esc(p)}</p>`).join('')}</div>
       <div class="note">${esc(w.note)}</div>
-      <div style="height:14px"></div>
-      <div class="field"><label class="label" for="ans">우리 팀의 답 <small>한 문장으로 작성</small></label>
-        <textarea id="ans">${esc(d.answer)}</textarea></div>
-      ${w.hasNext ? `<div class="field"><label class="label" for="nxt">다음에 이어서 할 수 있는 질문은?</label>
-        <textarea id="nxt" style="min-height:72px">${esc(d.next)}</textarea></div>` : ''}
-      <div class="row"><span class="tries">틀린 횟수 ${wrong} / ${ACT2.maxTries}</span><span class="saved" id="s_ans"></span></div>
-      ${f ? `<div class="feedback ${f.type}"><span class="t">${esc(f.title)}</span>${esc(f.text)}</div>` : ''}
-      <div style="height:12px"></div>
-      <button class="btn primary block" id="check">정답 확인</button>
+      ${mid}${inputs}
     </div>`);
   });
-  // 이전 WHY에서 넘어온 피드백(통과/강사채점) 표시
   if (fb && (cur === -1 || fb.key !== ACT2.whys[cur].key) && (fb.type === 'ok' || fb.type === 'manual-info')) {
     parts.splice(parts.length - 1, 0, `<div class="feedback ${fb.type === 'ok' ? 'ok' : 'soft'}" style="margin:0 0 14px"><span class="t">${esc(fb.title)}</span>${esc(fb.text)}</div>`);
   }
   if (cur === -1) {
-    parts.push(`<div class="card gold"><label class="label" for="core">핵심 원인 <small>${esc(ACT2.coreQ)}</small></label>
+    parts.push(`<div class="card gold"><label class="label" for="core">핵심 원인 <small>${esc(ACT2.coreQ)} · 강사님이 채점합니다 (${ACT2.coreMax}점)</small></label>
       <textarea id="core">${esc(team.act2?.core)}</textarea><div class="saved" id="s_core"></div></div>`);
     setBottom(`<button class="btn primary block" id="sub2">ACT 2 제출하고 다음으로</button>`);
   } else setBottom('');
@@ -263,11 +285,21 @@ function renderAct2() {
     $('#sub2').addEventListener('click', async () => {
       if (!(await confirmModal('ACT 2를 제출할까요?', '제출하면 수정할 수 없어요.', '제출'))) return;
       fb = null;
-      await goStage('pickup3', { 'act2.core': $('#core').value, 'act2.submittedAt': now() });
+      await goStage('pickup3', { 'act2.core': $('#core').value, 'act2.submittedAt': now(), ...overPatch('act2') });
     });
     return;
   }
   const w = ACT2.whys[cur];
+  $('#hintYes')?.addEventListener('click', async () => {
+    if (!(await confirmModal('힌트카드를 받을까요?', `${ACT2.hintCardPenalty}점이 차감됩니다.`, '받겠습니다'))) return;
+    await store.updateTeam(code, teamId, { [`act2.${w.key}.hintChoice`]: true, [`act2.${w.key}.hintCard`]: true, 'act2.hintCard': 'need' });
+    renderedKey = ''; onTeam();
+  });
+  $('#hintNo')?.addEventListener('click', async () => {
+    await store.updateTeam(code, teamId, { [`act2.${w.key}.hintChoice`]: false });
+    renderedKey = ''; onTeam();
+  });
+  if (!$('#ans')) return;
   $('#ans').addEventListener('input', (e) => debounceSave(`act2.${w.key}.answer`, e.target.value, $('#s_ans')));
   $('#nxt')?.addEventListener('input', (e) => debounceSave(`act2.${w.key}.next`, e.target.value, $('#s_ans')));
   $('#check').addEventListener('click', () => checkWhy(w));
@@ -279,32 +311,26 @@ async function checkWhy(w) {
   flushSaves();
   const ans = $('#ans').value, nxt = w.hasNext ? $('#nxt').value : '';
   const d = team.act2?.[w.key] || {};
-  const g = gradeWhy(w.key, ans, nxt);
-  const attempts = [...(d.attempts || []), { a: ans, n: nxt, ok: g.ok, soft: !!g.soft, at: now() }];
+  const soft = (text) => { fb = { key: w.key, type: 'soft', title: '조금만 더 작성해 주세요', text }; renderedKey = ''; onTeam(); };
+  if (w.hasNext && nxt.trim().length < 4) return soft('이어서 할 질문도 작성해 주세요.');
+  const g = gradeWhy(w.key, ans);
+  if (g.soft) return soft(g.reason);
+  const attempts = [...(d.attempts || []), { a: ans, n: nxt, ok: g.ok, at: now() }];
   const base = `act2.${w.key}`;
   const patch = { [`${base}.answer`]: ans, [`${base}.next`]: nxt, [`${base}.attempts`]: attempts };
+  const done = w.hasNext ? '다음 WHY가 열렸습니다.' : '마지막으로 핵심 원인을 정리해 주세요.';
   if (g.ok) {
     patch[`${base}.status`] = 'passed'; patch[`${base}.passedAt`] = now();
-    fb = { key: w.key, type: 'ok', title: `${w.label} 통과!`, text: w.hasNext ? '다음 WHY가 열렸습니다.' : '마지막으로 핵심 원인을 정리해 주세요.' };
-  } else if (g.soft) {
-    fb = { key: w.key, type: 'soft', title: '조금만 더 작성해 주세요', text: g.reason };
+    const pts = ACT2.pointsPerWhy - (d.wrong ? ACT2.penaltyPerWrong : 0) - (d.hintCard ? ACT2.hintCardPenalty : 0);
+    fb = { key: w.key, type: 'ok', title: `${w.label} 통과! (+${pts}점)`, text: done };
+  } else if (!d.wrong) {
+    patch[`${base}.wrong`] = 1;
+    fb = { key: w.key, type: 'bad', title: '', text: '' };
   } else {
-    const wrong = (d.wrong || 0) + 1;
-    patch[`${base}.wrong`] = wrong;
-    if (wrong >= ACT2.maxTries) {
-      patch[`${base}.status`] = 'manual'; patch[`${base}.manualAt`] = now();
-      fb = { key: w.key, type: 'manual-info', title: '강사님이 직접 채점할게요', text: w.hasNext ? '작성한 답은 저장되었습니다. 다음 WHY로 넘어갑니다.' : '작성한 답은 저장되었습니다. 핵심 원인을 정리해 주세요.' };
-    } else {
-      const hint = g.part === 'next'
-        ? '이어서 할 질문은 ‘방금 찾은 원인’이 왜, 어떻게 생겼는지를 묻는 질문이어야 합니다.'
-        : w.hints[wrong - 1];
-      const text = [g.reason, hint].filter(Boolean).join(' ');
-      fb = { key: w.key, type: 'bad', title: `다시 확인해 보세요 (${wrong}/${ACT2.maxTries})`, text };
-      if (w.hintCardOnSecond && wrong === 2) patch['act2.hintCard'] = 'need';
-    }
+    patch[`${base}.status`] = 'manual'; patch[`${base}.manualAt`] = now();
+    fb = { key: w.key, type: 'manual-info', title: '강사님이 직접 채점할게요', text: `작성한 답은 저장되었습니다. ${done}` };
   }
   await store.updateTeam(code, teamId, patch);
-  if (g.soft) { renderedKey = ''; onTeam(); }
 }
 
 // ── ACT 3 ───────────────────────────────
@@ -340,7 +366,7 @@ function renderAct3() {
     if (!(await confirmModal('이 순서로 제출할까요?', `먼저: ${act3Order.slice(0, 4).join(' → ')}\n이후: ${act3Order.slice(4).join(' → ')}\n제출하면 수정할 수 없어요.`, '제출'))) return;
     const sc = scoreAct3(act3Order, ACT3);
     const order = [...act3Order]; act3Order = null;
-    await goStage('pickup4', { 'act3.order': order, 'act3.score': sc.total, 'act3.parts': sc.parts, 'act3.submittedAt': now() });
+    await goStage('pickup4', { 'act3.order': order, 'act3.score': sc.total, 'act3.parts': sc.parts, 'act3.submittedAt': now(), ...overPatch('act3') });
   });
 }
 
@@ -365,7 +391,7 @@ function renderAct4() {
     if (!(await confirmModal('최종 제출할까요?', '제출하면 수정할 수 없어요.', '제출'))) return;
     const ans = Object.fromEntries(ACT4.questions.map((q) => [q.key, $('#' + q.key).value]));
     const auto = scoreAct4(ans);
-    await goStage('done', { 'act4.q1': ans.q1, 'act4.q2': ans.q2, 'act4.q3': ans.q3, 'act4.auto': auto, 'act4.submittedAt': now() });
+    await goStage('done', { 'act4.q1': ans.q1, 'act4.q2': ans.q2, 'act4.q3': ans.q3, 'act4.auto': auto, 'act4.submittedAt': now(), ...overPatch('act4') });
   });
 }
 

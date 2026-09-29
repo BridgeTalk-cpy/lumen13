@@ -4,7 +4,8 @@ export const GAME_TITLE = '사라진 13분을 찾아라!';
 export const MAX_TEAMS = 6;
 export const ADMIN_PIN = '1313'; // 강사 화면 비밀번호 (원하는 숫자로 바꾸세요)
 
-export const DEFAULT_TIMERS = { act1: 5, act2: 7, act3: 7, act4: 7 }; // 분
+export const DEFAULT_TIMERS = { act1: 10, act2: 10, act3: 10, act4: 10 }; // 분
+export const TIME_PENALTY = 10; // 제한시간을 넘겨 제출하면 해당 ACT에서 빼는 점수 (0점 아래로도 내려감)
 
 export const ACT1 = {
   title: 'ACT 1 | 찾아라',
@@ -23,10 +24,13 @@ export const ACT1 = {
 
 export const ACT2 = {
   title: 'ACT 2 | 밝혀라',
-  intro: 'WHY를 하나씩 풀어 원인을 추적하십시오. 답과 함께, 이어서 할 질문을 직접 만들어야 다음 WHY가 열립니다.',
+  intro: 'WHY를 하나씩 풀어 원인을 추적하십시오. 답과 함께 이어서 할 질문을 작성하면, 답이 맞을 때 다음 WHY가 열립니다.',
   pointsPerWhy: 10,
-  penaltyPerWrong: 2,
-  maxTries: 3,
+  penaltyPerWrong: 2,   // 1차 오답 감점
+  hintCardPenalty: 3,   // WHY 3 힌트카드 사용 감점
+  maxTries: 2,          // 1차 자동 채점 → 2차 자동 채점, 2차도 틀리면 강사 채점
+  coreMax: 10,          // 핵심 원인 (강사 채점)
+  coreModel: '장비 변경 후 재확인·사용 승인 절차와 책임이 명확하지 않았다. (절차와 책임의 공백)',
   whys: [
     {
       key: 'why1',
@@ -40,10 +44,8 @@ export const ACT2 = {
       hasNext: true,
       model: '이상 증상은 CS-13(군중안정용 시제품 성분)에 노출되었기 때문에 발생했다.',
       modelNext: '왜 CS-13(시제품 성분)이 공기 중에 퍼졌을까?',
-      hints: [
-        '증상이 있는 사람들의 공통점은 옷이나 흔적이 아니라, 그 시간에 있었던 장소와 공기에 있습니다.',
-        '추가 조사카드 ①의 \'시험 중 확인된 반응\'을 단서카드 ② 의료 기록과 비교해 보세요.',
-      ],
+      hint: '추가 조사카드와 의료 기록을 연결해 보세요.',
+      keywords: '① 물질(CS-13 · 시제품 · 군중안정용 성분) + ② 노출 · 흡입 · 퍼짐 등 작용 방식',
     },
     {
       key: 'why2',
@@ -57,10 +59,8 @@ export const ACT2 = {
       hasNext: true,
       model: '승인 목록에 없는 CS-13 용기가 연무장치에 연결되어, 예정에 없던 17:15에 분사되었기 때문이다.',
       modelNext: '왜 승인되지 않은 시제품이 장비에 연결되고 분사될 수 있었을까?',
-      hints: [
-        '누가 했는지가 아니라, 물질이 \'어떤 경로로\' 퍼졌는지를 써 보세요.',
-        '단서카드 ② 승인 목록과 현장 장비를 비교하고, 단서카드 ① 테스트 예정 시간과 실제 작동 시간을 비교해 보세요.',
-      ],
+      hint: '단서카드 ②의 목록과 사진을 비교해 보세요.',
+      keywords: '① 승인되지 않은 · 승인 목록에 없는 · 추가 용기 (또는 예정에 없던 17:15) + ② 연무장치 연결 · 분사 · 작동',
     },
     {
       key: 'why3',
@@ -73,11 +73,9 @@ export const ACT2 = {
       note: '※ 개인의 동기보다 확인 · 권한 · 책임 · 절차를 살펴보십시오.',
       hasNext: false,
       model: '장비 변경 후 재확인·사용 승인 절차와 책임이 명확하지 않았기 때문이다.',
-      hints: [
-        '개인의 동기보다 확인 · 권한 · 책임 · 절차를 살펴보십시오.',
-        '강사님께 힌트카드 ①을 받으러 오세요. 인터뷰에서 각자 \'누가 할 일\'이라고 생각했는지 비교해 보세요.',
-      ],
-      hintCardOnSecond: true,
+      hint: '',
+      hintCard: true, // 1차 오답 후 "힌트카드를 받겠습니까? (−3점)" 선택
+      keywords: '확인 · 권한 · 책임 · 절차 중 2가지 이상 + 없었다 · 불명확 · 미흡 등 부족 표현',
     },
   ],
   coreQ: '우리 팀이 찾은 핵심 원인은?',

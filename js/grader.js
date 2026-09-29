@@ -22,6 +22,9 @@ const PURPLE = ['보라'];
 const DISTRACTOR_CAUSE = ['음식', '알레르기', '알러지', '고열', '더위', '열사병', '더워', '탈수', '식중독'];
 const PERSON = ['담당자', '범인', '팀장', '박준호', '기술자', '직원이', '직원의', '작업자가', '작업자의', '스태프가', '누가작동', '누가분사', '누가했'];
 
+// WHY1
+const EXPOSE = ['노출', '흡입', '들이마', '들이켜', '마셔', '마셨', '마시', '접촉', '맡', '호흡', '퍼', '분사', '뿌', '살포', '공기', '작용', '영향', '중독', '닿', '묻', '반응'];
+
 // WHY2
 const UNAPPROVED = ['승인되지않', '승인안', '미승인', '승인목록에없', '승인없이', '승인받지않', '승인을받지않', '승인을안', '허가없이', '허가받지않', '허가되지않', '무단', '추가용기', '추가된용기', '추가로연결', '몰래', '불법', '승인외', '목록에없', '목록외'];
 const UNSCHEDULED = ['예정에없', '예정되지않', '예정보다', '예정과다르', '일정에없', '일정과다르', '1715', '예정외', '예정시간전', '테스트전', '테스트시간이아닌', '예정전'];
@@ -40,44 +43,34 @@ const LACK = ['없', '부재', '누락', '미흡', '불명확', '명확하지', 
 
 const r = (ok, extra = {}) => ({ ok, soft: false, reason: '', ...extra });
 
-export function gradeWhy(key, answer, next) {
+// 답만 채점합니다. (다음 질문은 채점하지 않음)
+export function gradeWhy(key, answer) {
   const a = norm(answer);
-  const n = norm(next);
   if (a.length < 4) return r(false, { soft: true, reason: '답을 한 문장으로 작성해 주세요.' });
 
   if (key === 'why1') {
-    const subst = has(a, SUBSTANCE);
-    if (!subst && has(a, PURPLE)) return r(false, { reason: '보라색 흔적 표에서, 흔적과 증상이 항상 함께 나타나는지 확인해 보세요.' });
-    if (!subst && has(a, DISTRACTOR_CAUSE)) return r(false, { reason: '의료 기록을 다시 보세요. 고열·음식 알레르기 반응은 모두 \'없음\'입니다.' });
-    if (!subst) return r(false);
-    // 다음 질문
-    if (n.length < 4) return r(false, { soft: true, reason: '이어서 할 질문도 작성해 주세요.' });
-    const aboutSource = has(n, SUBSTANCE) && has(n, ['있었', '사용', '쓰였', '들어', '반입', '왔', '생겼', '발생']);
-    if (!(has(n, QUESTION) && (has(n, SPREAD) || aboutSource))) return r(false, { part: 'next' });
-    return r(true);
+    return r(has(a, SUBSTANCE) && has(a, EXPOSE));
   }
-
   if (key === 'why2') {
     const okA = (has(a, UNAPPROVED) || has(a, UNSCHEDULED)) && (has(a, DEVICE) || has(a, ACTION));
-    if (!okA) return r(false);
-    if (has(a, PERSON)) return r(false, { soft: true, reason: '아직 누가 작동했는지는 판단하지 마십시오. \'누가\'가 아니라 \'어떻게\' 퍼졌는지를 써 주세요.' });
-    if (n.length < 4) return r(false, { soft: true, reason: '이어서 할 질문도 작성해 주세요.' });
-    if (!(has(n, QUESTION) && has(n, POSSIBLE))) return r(false, { part: 'next' });
-    return r(true);
+    if (okA && has(a, PERSON)) return r(false, { soft: true, reason: '아직 누가 작동했는지는 판단하지 마십시오. \'누가\'가 아니라 \'어떻게\' 퍼졌는지를 써 주세요.' });
+    return r(okA);
   }
-
   if (key === 'why3') {
     const c = count(a, [G_CHECK, G_AUTH, G_RESP, G_PROC]);
-    if (c >= 2 && has(a, LACK)) return r(true);
-    return r(false);
+    return r(c >= 2 && has(a, LACK));
   }
   return r(false);
 }
 
 // ── ACT 2 점수 ─────────────────────────────
-export function whyScore(w, manual, cfg = { pointsPerWhy: 10, penaltyPerWrong: 2 }) {
+// 1차 정답 10 / 1차 오답 −2 / 힌트카드 −3 / 2차도 오답이면 강사 점수(최대값 = 남은 점수)
+export function whyMax(w, cfg) {
+  return cfg.pointsPerWhy - cfg.penaltyPerWrong * (w?.wrong ? 1 : 0) - (w?.hintCard ? cfg.hintCardPenalty : 0);
+}
+export function whyScore(w, manual, cfg) {
   if (!w) return { score: 0, pending: false };
-  if (w.status === 'passed') return { score: Math.max(cfg.pointsPerWhy - cfg.penaltyPerWrong * (w.wrong || 0), 0), pending: false };
+  if (w.status === 'passed') return { score: whyMax(w, cfg), pending: false };
   if (w.status === 'manual') {
     if (typeof manual === 'number') return { score: manual, pending: false };
     return { score: 0, pending: true };
